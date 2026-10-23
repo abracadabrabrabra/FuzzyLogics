@@ -4,7 +4,7 @@
 )
 
 target_include_directories(fuzzy_core PUBLIC include)
-
+target_compile_features(fuzzy_core PUBLIC cxx_std_17)
 set_target_properties(fuzzy_core PROPERTIES
     WINDOWS_EXPORT_ALL_SYMBOLS ON
 )

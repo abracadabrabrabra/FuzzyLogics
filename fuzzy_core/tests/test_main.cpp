@@ -10,7 +10,9 @@ static bool almost_equal(double a, double b, double eps = 1e-9) {
     return std::fabs(a - b) < eps;
 }
 
-static void test_default_constructor() {
+//Creation, state
+
+static void test_empty_state() {
     FuzzyValue v;
     assert(v.empty());
     assert(v.size() == 0);
@@ -31,38 +33,6 @@ static void test_constructor_from_vectors() {
     assert(v.is_valid());
 }
 
-static void test_size_mismatch() {
-    std::vector<double> xs = { 1.0, 2.0, 3.0 };
-    std::vector<double> mus = { 0.5, 0.5 }; 
-    FuzzyValue v;
-    v.assign(xs, mus);
-    assert(!v.is_valid());
-}
-
-static void test_mu_out_of_range() {
-    std::vector<double> xs = { 1.0, 2.0 };
-    std::vector<double> mus = { 1.5, -0.1 };
-    FuzzyValue v;
-    v.assign(xs, mus);
-    assert(!v.is_valid());
-}
-
-static void test_nan_mu() {
-    std::vector<double> xs = { 1.0 };
-    std::vector<double> mus = { std::nan("") };
-    FuzzyValue v;
-    v.assign(xs, mus);
-    assert(!v.is_valid());
-}
-
-static void test_unordered_x() {
-    std::vector<double> xs = { 3.0, 1.0, 2.0 };
-    std::vector<double> mus = { 0.3, 0.3, 0.4 };
-    FuzzyValue v;
-    v.assign(xs, mus);
-    assert(!v.is_valid());
-}
-
 static void test_add_point() {
     FuzzyValue v;
     v.add_point(1.0, 0.2);
@@ -71,6 +41,45 @@ static void test_add_point() {
     assert(v.size() == 3);
     assert(v.is_valid());
 }
+
+static void test_clear() {
+    FuzzyValue v({ 1.0, 2.0 }, { 0.5, 0.5 });
+    v.clear();
+    assert(v.empty());
+    assert(v.is_valid());
+}
+
+static void test_copy_move() {
+    FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
+    FuzzyValue b = a;
+    assert(b.size() == 2);
+    assert(almost_equal(b.mus()[0], 0.5));
+
+    FuzzyValue c = std::move(a);
+    assert(c.size() == 2);
+}
+
+//Is_valid
+
+static void test_validation_errors() {
+    FuzzyValue v1;
+    v1.assign({ 1.0, 2.0, 3.0 }, { 0.5, 0.5 });
+    assert(!v1.is_valid());
+
+    FuzzyValue v2;
+    v2.assign({ 1.0, 2.0 }, { 1.5, -0.1 });
+    assert(!v2.is_valid());
+
+    FuzzyValue v3;
+    v3.assign({ 1.0 }, { std::nan("") });
+    assert(!v3.is_valid());
+
+    FuzzyValue v4;
+    v4.assign({ 3.0, 1.0, 2.0 }, { 0.3, 0.3, 0.4 });
+    assert(!v4.is_valid());
+}
+
+//Pruning, normalization
 
 static void test_normalize_sum() {
     FuzzyValue v({ 1.0, 2.0, 3.0 }, { 1.0, 2.0, 1.0 });
@@ -87,7 +96,7 @@ static void test_normalize_max() {
     assert(v.is_valid());
     double max_mu = 0.0;
     for (double mu : v.mus()) max_mu = std::max(max_mu, mu);
-    assert(almost_equal(max_mu, 1.0)); 
+    assert(almost_equal(max_mu, 1.0));
 }
 
 static void test_prune() {
@@ -98,23 +107,7 @@ static void test_prune() {
     assert(v.is_valid());
 }
 
-static void test_clear() {
-    FuzzyValue v({ 1.0, 2.0 }, { 0.5, 0.5 });
-    v.clear();
-    assert(v.empty());
-    assert(v.size() == 0);
-    assert(v.is_valid());
-}
-
-static void test_copy_move() {
-    FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
-    FuzzyValue b = a;             
-    assert(b.size() == 2);
-    assert(almost_equal(b.mus()[0], 0.5));
-
-    FuzzyValue c = std::move(a);  
-    assert(c.size() == 2);
-}
+// Arithmetical operators
 
 static void test_operator_plus() {
     FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
@@ -146,6 +139,55 @@ static void test_operator_plus_empty() {
     assert(c.empty());
 }
 
+static void test_operator_minus() {
+    FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
+    FuzzyValue b({ 10.0 }, { 1.0 });
+    FuzzyValue c = a - b;
+    assert(c.size() == 2);
+    assert(almost_equal(c.xs()[0], -9.0));
+    assert(almost_equal(c.mus()[0], 0.5));
+    assert(almost_equal(c.xs()[1], -8.0));
+    assert(almost_equal(c.mus()[1], 0.5));
+    assert(c.is_valid());
+}
+
+static void test_operator_multiply() {
+    FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
+    FuzzyValue b({ 3.0 }, { 1.0 });
+    FuzzyValue c = a * b;
+    assert(c.size() == 2);
+    assert(almost_equal(c.xs()[0], 3.0));
+    assert(almost_equal(c.mus()[0], 0.5));
+    assert(almost_equal(c.xs()[1], 6.0));
+    assert(almost_equal(c.mus()[1], 0.5));
+    assert(c.is_valid());
+}
+
+static void test_operator_divide() {
+    FuzzyValue a({ 2.0, 4.0 }, { 0.5, 0.5 });
+    FuzzyValue b({ 2.0 }, { 1.0 });
+    FuzzyValue c = a / b;
+    assert(c.size() == 2);
+    assert(almost_equal(c.xs()[0], 1.0));
+    assert(almost_equal(c.mus()[0], 0.5));
+    assert(almost_equal(c.xs()[1], 2.0));
+    assert(almost_equal(c.mus()[1], 0.5));
+    assert(c.is_valid());
+}
+
+static void test_operator_divide_by_zero() {
+    FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
+    FuzzyValue b({ 0.0, 1.0 }, { 1.0, 1.0 });
+    FuzzyValue c = a / b;
+
+    assert(c.size() == 2);
+    assert(almost_equal(c.xs()[0], 1.0));
+    assert(almost_equal(c.xs()[1], 2.0));
+    assert(c.is_valid());
+}
+
+// Comparsion
+
 static void test_comparison() {
     FuzzyValue a({ 1.0, 2.0 }, { 0.5, 0.5 });
     FuzzyValue b({ 10.0 }, { 1.0 });
@@ -175,28 +217,55 @@ static void test_centroid_empty() {
     assert(almost_equal(v.centroid(), 0.0));
 }
 
-int main() {
-    RUN_TEST(test_default_constructor);
+// Launch
+
+static void run_creation_tests() {
+    std::cout << "--- Creation & state ---\n";
+    RUN_TEST(test_empty_state);
     RUN_TEST(test_constructor_from_vectors);
-    RUN_TEST(test_size_mismatch);
-    RUN_TEST(test_mu_out_of_range);
-    RUN_TEST(test_nan_mu);
-    RUN_TEST(test_unordered_x);
     RUN_TEST(test_add_point);
+    RUN_TEST(test_clear);
+    RUN_TEST(test_copy_move);
+}
+
+static void run_validation_tests() {
+    std::cout << "--- Validation ---\n";
+    RUN_TEST(test_validation_errors);
+}
+
+static void run_normalization_tests() {
+    std::cout << "--- Normalization & pruning ---\n";
     RUN_TEST(test_normalize_sum);
     RUN_TEST(test_normalize_max);
     RUN_TEST(test_prune);
-    RUN_TEST(test_clear);
-    RUN_TEST(test_copy_move);
+}
+
+static void run_arithmetic_tests() {
+    std::cout << "--- Arithmetic ---\n";
     RUN_TEST(test_operator_plus);
     RUN_TEST(test_operator_plus_overlapping);
     RUN_TEST(test_operator_plus_empty);
+    RUN_TEST(test_operator_minus);
+    RUN_TEST(test_operator_multiply);
+    RUN_TEST(test_operator_divide);
+    RUN_TEST(test_operator_divide_by_zero);
+}
+
+static void run_comparison_tests() {
+    std::cout << "--- Comparison & centroid ---\n";
     RUN_TEST(test_comparison);
     RUN_TEST(test_comparison_equal_centroids);
     RUN_TEST(test_centroid);
     RUN_TEST(test_centroid_empty);
-    
+}
 
-    std::cout << "All fuzzy_value tests successfully passed\n";
+int main() {
+    run_creation_tests();
+    run_validation_tests();
+    run_normalization_tests();
+    run_arithmetic_tests();
+    run_comparison_tests();
+
+    std::cout << "\nAll fuzzy_value tests successfully passed\n";
     return 0;
 }

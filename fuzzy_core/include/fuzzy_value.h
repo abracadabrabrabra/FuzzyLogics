@@ -44,3 +44,6 @@ bool operator==(const FuzzyValue& a, const FuzzyValue& b);
 bool operator!=(const FuzzyValue& a, const FuzzyValue& b);
 
 FuzzyValue operator+(const FuzzyValue& a, const FuzzyValue& b);
+FuzzyValue operator-(const FuzzyValue& a, const FuzzyValue& b);
+FuzzyValue operator*(const FuzzyValue& a, const FuzzyValue& b);
+FuzzyValue operator/(const FuzzyValue& a, const FuzzyValue& b);
