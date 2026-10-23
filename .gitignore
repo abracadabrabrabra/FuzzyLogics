@@ -1,0 +1,14 @@
+build/
+out/
+.vs/
+x64/
+Debug/
+Release/
+*.user
+*.suo
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
