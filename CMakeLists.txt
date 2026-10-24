@@ -7,4 +7,5 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 add_subdirectory(fuzzy_core)
 add_subdirectory(fuzzy_generator)
+add_subdirectory(fuzzy_io)
 add_subdirectory(main)
