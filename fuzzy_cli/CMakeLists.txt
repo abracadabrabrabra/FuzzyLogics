@@ -1,0 +1,2 @@
+add_executable(fuzzy_cli fuzzy_cli.cpp)
+target_link_libraries(fuzzy_cli PRIVATE fuzzy_session fuzzy_generator fuzzy_io fuzzy_core)
