@@ -67,12 +67,11 @@ namespace fuzzy_session {
         return add(get(i) / get(j));
     }
 
-    CompareResult Session::compare(std::size_t i, std::size_t j) const {
+    CompareResult Session::compare(std::size_t i, std::size_t j, double eps) const {
         double ci = centroid(i);
         double cj = centroid(j);
-        if (ci < cj) return CompareResult::Less;
-        if (ci > cj) return CompareResult::Greater;
-        return CompareResult::Equal;
+        if (std::fabs(ci - cj) < eps) return CompareResult::Equal;
+        return (ci < cj) ? CompareResult::Less : CompareResult::Greater;
     }
 
     double Session::centroid(std::size_t i) const {

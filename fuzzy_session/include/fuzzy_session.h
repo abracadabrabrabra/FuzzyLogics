@@ -35,7 +35,7 @@ namespace fuzzy_session {
         std::size_t mul_values(std::size_t i, std::size_t j);
         std::size_t div_values(std::size_t i, std::size_t j);
 
-        CompareResult compare(std::size_t i, std::size_t j) const;
+        CompareResult compare(std::size_t i, std::size_t j, double eps = 1e-9) const;
         double centroid(std::size_t i) const;
 
         void save_to_file(const std::string& path) const;

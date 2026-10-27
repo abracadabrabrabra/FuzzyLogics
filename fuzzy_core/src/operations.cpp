@@ -16,7 +16,7 @@ double FuzzyValue::centroid() const noexcept {
 
 bool operator<(const FuzzyValue& a, const FuzzyValue& b) { return a.centroid() < b.centroid(); }
 bool operator>(const FuzzyValue& a, const FuzzyValue& b) { return a.centroid() > b.centroid(); }
-bool operator==(const FuzzyValue& a, const FuzzyValue& b) { return std::fabs(a.centroid() - b.centroid()) < 1e-9; }
+bool operator==(const FuzzyValue& a, const FuzzyValue& b) { return a.centroid() == b.centroid(); }
 bool operator!=(const FuzzyValue& a, const FuzzyValue& b) { return !(a == b); }
 
 namespace detail {
