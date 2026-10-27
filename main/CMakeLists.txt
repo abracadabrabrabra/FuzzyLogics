@@ -5,6 +5,9 @@ if(POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
+find_package(SDL3 CONFIG REQUIRED)
+find_package(SDL3_ttf CONFIG REQUIRED)
+
 add_executable(main "main.cpp" "main.h")
 
 if(CMAKE_VERSION VERSION_GREATER 3.12)
@@ -12,4 +15,4 @@ if(CMAKE_VERSION VERSION_GREATER 3.12)
 endif()
 
 
-target_link_libraries(main PRIVATE fuzzy_core)
+target_link_libraries(main PRIVATE fuzzy_core fuzzy_session fuzzy_io fuzzy_generator SDL3::SDL3 SDL3_ttf::SDL3_ttf)

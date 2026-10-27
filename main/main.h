@@ -1,9 +1,11 @@
-﻿// main.h : включаемый файл для стандартных системных включаемых файлов
-// или включаемые файлы для конкретного проекта.
-
-#pragma once
+﻿#pragma once
 
 #include <iostream>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_surface.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
-// TODO: установите здесь ссылки на дополнительные заголовки, требующиеся для программы.
 #include "fuzzy_value.h"
+#include "poisson_generator.h"
+#include "fuzzy_session.h"
+#include "fuzzy_io.h"

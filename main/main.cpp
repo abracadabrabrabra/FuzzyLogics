@@ -1,13 +1,8 @@
-﻿// main.cpp: определяет точку входа для приложения.
-//
-
-#include "main.h"
-
-using namespace std;
+﻿#include "main.h"
 
 int main()
 {
 	FuzzyValue a;
-	std::cout << "test_fuzzy_core: OK (is_empty = " << a.empty() << ")\n";
+	std::cout << "test_fuzzy_core: OK (is_empty = " << a.empty() << ") + sdl\n";
 	return 0;
 }
