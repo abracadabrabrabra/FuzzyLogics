@@ -14,6 +14,11 @@
 #include <stdio.h>
 #include <vector>
 #include <SDL3/SDL.h>
+
+#include "fuzzy_session.h"
+#include "poisson_generator.h"
+#include "fuzzy_io.h"
+
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL3/SDL_opengles2.h>
 #else
@@ -129,8 +134,27 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
     //IM_ASSERT(font != nullptr);
 
+    //FuzzySession
+    fuzzy_session::Session session;
+    std::vector<std::string> plot_labels;
+
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+
+    //Custom ColorMap
+
+    const int COLOR_COUNT = 400;
+    std::vector<ImVec4> custom_colors;
+    custom_colors.reserve(COLOR_COUNT);
+
+    for (int i = 0; i < COLOR_COUNT; ++i) {
+        float hue = std::fmod(i * 0.618034f, 1.0f);
+        float r, g, b;
+        ImGui::ColorConvertHSVtoRGB(hue, 0.7f, 0.9f, r, g, b);
+        custom_colors.push_back(ImVec4(r, g, b, 1.0f));
+    }
+    ImPlotColormap custom_map = ImPlot::AddColormap("CustomFuzzy", custom_colors.data(), COLOR_COUNT);
 
     // Main loop
     bool done = false;
@@ -184,17 +208,22 @@ int main(int, char**)
         if (ImGui::Begin("Graphics Area", nullptr, commonFlags)) {
             ImVec2 avail = ImGui::GetContentRegionAvail();
             ImVec2 plotSize(avail.x * 0.9f, avail.y * 0.9f);
-            ImGui::SetCursorPos(ImVec2(avail.x * 0.05f, avail.y * 0.05f));
-            if (ImPlot::BeginPlot("Plot", plotSize)) {
-                ImPlotSpec spec;
-                spec.LineColor = ImVec4(1, 0, 0, 1);
-                spec.LineWeight = 2.0f;
-                spec.Marker = ImPlotMarker_Circle;
-                spec.Flags = ImPlotItemFlags_NoLegend;
-                std::vector<float> xs = { 0.0f, 1.0f, 2.0f };
-                std::vector<float> ys = { 0.0f, 0.5f, 1.0f };
-                int count = xs.size();
-                ImPlot::PlotLine("MyLine", xs.data(), ys.data(), count, spec);
+            ImGui::SetCursorPos(ImVec2(avail.x * 0.05f, avail.y * 0.05f));           
+            if (ImPlot::BeginPlot("Fuzzy Values", plotSize, ImPlotFlags_NoLegend)) {
+                ImPlot::SetupAxesLimits(0.0, 20.0, 0.0, 1.0, ImPlotCond_Once);
+                ImPlot::SetupAxes("x", "mu(x)",
+                    ImPlotAxisFlags_RangeFit,
+                    ImPlotAxisFlags_RangeFit);
+
+                for (size_t i = 0; i < session.size(); ++i) {
+                    const auto& v = session.get(i);
+                    ImPlotSpec spec;
+                    spec.LineColor = ImPlot::GetColormapColor(static_cast<int>(i), custom_map);
+                    const char* label = (i < plot_labels.size()) ? plot_labels[i].c_str() : "Value";
+                    ImPlot::PlotLine(label,
+                        v.xs().data(), v.mus().data(),
+                        static_cast<int>(v.size()), spec);
+                }
                 ImPlot::EndPlot();
             }
         }
@@ -229,7 +258,15 @@ int main(int, char**)
             ImGui::Dummy(ImVec2(0, startY));
 
             ImGui::SetCursorPosX(centerX);
-            ImGui::Button("Generate", ImVec2(btnW, 0));
+            if (ImGui::Button("Generate", ImVec2(btnW, 0))) {
+                auto set = fuzzy_generator::generate_poisson_set(50, 10.0, 20.0, 1000);
+                size_t old_size = session.size();
+                session.add(std::move(set));
+
+                for (size_t i = old_size; i < session.size(); ++i) {
+                    plot_labels.push_back("Value " + std::to_string(i));
+                }
+            }
             ImGui::Dummy(ImVec2(0, gap));
 
             ImGui::SetCursorPosX(centerX);
@@ -237,7 +274,9 @@ int main(int, char**)
             ImGui::Dummy(ImVec2(0, gap));
 
             ImGui::SetCursorPosX(centerX);
-            ImGui::Button("Clear", ImVec2(btnW, 0));
+            if (ImGui::Button("Clear", ImVec2(btnW, 0))) {
+                session.clear();
+            }
             ImGui::Dummy(ImVec2(0, gap));
 
             ImGui::SetCursorPosX(centerX);
@@ -258,13 +297,27 @@ int main(int, char**)
         ImGui::SetNextWindowSize(ImVec2(panelWidth, graphicsSize.y), ImGuiCond_Always);
         ImGui::SetNextWindowPos(logPos, ImGuiCond_Always);
         if (ImGui::Begin("Log", nullptr, commonFlags)) {
-            ImGui::Text("Log text...");
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+            ImGui::Text("Info text:\n");
+            for (size_t i = 0; i < session.size(); ++i) {
+                ImVec4 color = ImPlot::GetColormapColor(static_cast<int>(i), custom_map);
+                ImU32 col_u32 = ImGui::ColorConvertFloat4ToU32(color);
+
+                ImVec2 p = ImGui::GetCursorScreenPos();
+                float square_size = ImGui::GetTextLineHeight() * 0.8f;
+
+                draw_list->AddRectFilled(p, ImVec2(p.x + square_size, p.y + square_size), col_u32);
+
+                ImGui::Dummy(ImVec2(square_size + 4.0f, square_size));
+                ImGui::SameLine();
+                ImGui::Text("[%zu] size=%zu centroid=%.3f", i, session.get(i).size(), session.centroid(i));
+            }
         }
         ImGui::End();
 
         // Hello Text 
         ImGui::SetNextWindowPos(ImVec2(viewportCenter.x, graphicsTopLeft.y - 30.0f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); // Прозрачный фон
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
         if (ImGui::Begin("HelloText", nullptr, commonFlags | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("Fuzzy Complex GUI");
         }

@@ -11,6 +11,10 @@ find_package(SDL3 REQUIRED)
 find_package(OpenGL REQUIRED)
 
 target_link_libraries(MyFuzzyApp PRIVATE
+    fuzzy_core
+    fuzzy_generator
+    fuzzy_io
+    fuzzy_session
     imgui_implot
     SDL3::SDL3
     OpenGL::GL
