@@ -1,3 +1,4 @@
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 add_library(fuzzy_generator SHARED
 	src/poisson_generator.cpp
 )

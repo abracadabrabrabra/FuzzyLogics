@@ -24,6 +24,16 @@ namespace fuzzy_generator {
 		std::mt19937_64& rng
 	);
 
+	std::vector<FuzzyValue> generate_poisson_set_parallel(
+		std::size_t n,
+		double lambda_min,
+		double lambda_max,
+		std::size_t M,
+		FuzzyValue::NormalizeMode mode = FuzzyValue::NormalizeMode::Max,
+		double prune_threshold = 0.1,
+		std::uint64_t seed = std::random_device{}()
+	);
+
 	std::vector<FuzzyValue> generate_poisson_set(
 		std::size_t n,
 		double lambda_min,

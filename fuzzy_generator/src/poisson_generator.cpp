@@ -3,23 +3,23 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <thread>
 
 
 namespace {
 
     int poisson_sample(double lambda, std::mt19937_64& rng) {
         std::uniform_real_distribution<double> dist(0.0, 1.0);
-        double sum = 0.0;
+        double sum_logs = 0.0;
         int k = 0;
         const int MAX_ITER = 100000;
 
-        while (sum <= 1.0 && k < MAX_ITER) {
+        while (sum_logs <= lambda && k < MAX_ITER) {
             double u = dist(rng);
             if (u <= 0.0) u = std::numeric_limits<double>::min();
-            sum += -std::log(u) / lambda;
+            sum_logs += -std::log(u);
             ++k;
         }
-
         return (k < MAX_ITER) ? (k - 1) : k;
     }
 
@@ -58,26 +58,73 @@ namespace fuzzy_generator {
             throw std::invalid_argument("generate_poisson_value: prune_threshold must be in [0, 1]");
         }
 
-        std::map<int, std::size_t> counts;
+        std::vector<int> samples(M);
         for (std::size_t i = 0; i < M; ++i) {
-            int k = poisson_sample(lambda, rng);
-            ++counts[k];
+            samples[i] = poisson_sample(lambda, rng);
         }
+        std::sort(samples.begin(), samples.end());
 
         std::vector<double> xs;
         std::vector<double> mus;
-        xs.reserve(counts.size());
-        mus.reserve(counts.size());
+        xs.reserve(50);
+        mus.reserve(50);
 
-        for (const auto& [k, count] : counts) {
+        std::size_t i = 0;
+        while (i < M) {
+            int k = samples[i];
+            std::size_t j = i;
+            while (j < M && samples[j] == k) ++j;
             xs.push_back(static_cast<double>(k));
-            mus.push_back(static_cast<double>(count) / static_cast<double>(M));
+            mus.push_back(static_cast<double>(j - i) / static_cast<double>(M));
+            i = j;
         }
 
         FuzzyValue result(xs, mus);
         result.normalize(mode);
         result.prune(prune_threshold);
 
+        return result;
+    }
+
+    std::vector<FuzzyValue> generate_poisson_set_parallel(
+        std::size_t n, double lambda_min, double lambda_max,
+        std::size_t M, FuzzyValue::NormalizeMode mode,
+        double prune_threshold, std::uint64_t seed)
+    {
+
+        unsigned T = std::thread::hardware_concurrency();
+        if (T == 0) T = 4;
+        if (T > n) T = static_cast<unsigned>(n);
+
+        std::vector<std::vector<FuzzyValue>> parts(T);
+        std::vector<std::thread> threads;
+        threads.reserve(T);
+
+        for (unsigned t = 0; t < T; ++t) {
+            std::size_t begin = n * t / T;
+            std::size_t end = n * (t + 1) / T;
+
+            threads.emplace_back([&, t, begin, end]() {
+                std::mt19937_64 rng(seed + t);
+                std::uniform_real_distribution<double> lambda_dist(lambda_min, lambda_max);
+                parts[t].reserve(end - begin);
+
+                for (std::size_t i = begin; i < end; ++i) {
+                    double lambda = lambda_dist(rng);
+                    parts[t].push_back(generate_poisson_value(lambda, M, mode, prune_threshold, rng));
+                }
+                });
+        }
+
+        for (auto& th : threads) th.join();
+
+        std::vector<FuzzyValue> result;
+        result.reserve(n);
+        for (auto& part : parts) {
+            for (auto& v : part) {
+                result.push_back(std::move(v));
+            }
+        }
         return result;
     }
 
@@ -98,6 +145,11 @@ namespace fuzzy_generator {
         }
         if (!(lambda_max >= lambda_min) || !std::isfinite(lambda_max)) {
             throw std::invalid_argument("generate_poisson_set: lambda_max must be >= lambda_min");
+        }
+
+        unsigned hw = std::thread::hardware_concurrency();
+        if (hw > 1 && n * M >= 100'000) {
+            return generate_poisson_set_parallel(n, lambda_min, lambda_max, M, mode, prune_threshold, seed);
         }
 
         std::mt19937_64 rng(seed);

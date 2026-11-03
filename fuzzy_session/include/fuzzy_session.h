@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstddef>
 #include <string>
+#include <cstdint>
 
 namespace fuzzy_session {
 
@@ -41,6 +42,10 @@ namespace fuzzy_session {
         void save_to_file(const std::string& path) const;
         void load_from_file(const std::string& path);
         void log_summary(std::ostream& out) const;
+
+        std::size_t serialized_size() const;
+        std::size_t serialize_to_buffer(std::uint8_t* buffer, std::size_t buffer_size) const;
+        std::size_t deserialize_from_buffer(const std::uint8_t* buffer, std::size_t buffer_size);
 
     private:
         std::vector<FuzzyValue> values_;

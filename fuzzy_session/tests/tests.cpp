@@ -130,6 +130,38 @@ static void test_log_summary() {
     assert(out.find("[0]") != std::string::npos);
 }
 
+static void test_serialize_roundtrip() {
+    Session s1;
+    s1.add(FuzzyValue({ 1.0, 2.0, 3.0 }, { 0.2, 0.5, 0.3 }));
+    s1.add(FuzzyValue({ 10.0 }, { 1.0 }));
+
+    std::vector<std::uint8_t> buffer(s1.serialized_size());
+    std::size_t written = s1.serialize_to_buffer(buffer.data(), buffer.size());
+    assert(written == buffer.size());
+
+    Session s2;
+    std::size_t read = s2.deserialize_from_buffer(buffer.data(), written);
+    assert(read == written);
+    assert(s2.size() == 2);
+    assert(s2.get(0).size() == 3);
+    assert(s2.get(1).size() == 1);
+    assert(std::fabs(s2.get(0).xs()[0] - 1.0) < 1e-12);
+    assert(std::fabs(s2.get(0).mus()[1] - 0.5) < 1e-12);
+}
+
+static void test_serialize_buffer_too_small() {
+    Session s;
+    s.add(FuzzyValue({ 1.0, 2.0 }, { 0.5, 0.5 }));
+    std::vector<std::uint8_t> buffer(4); //little
+    try {
+        s.serialize_to_buffer(buffer.data(), buffer.size());
+        assert(false && "should have thrown");
+    }
+    catch (const std::runtime_error&) {
+        // OK
+    }
+}
+
 int main() {
 
     test_add_and_get();
@@ -140,8 +172,10 @@ int main() {
     test_compare();
     test_save_load_roundtrip();
     test_log_summary();
+    test_serialize_roundtrip();
+    test_serialize_buffer_too_small();
 
-    std::cout << "All sessions tests successfully passed" << std::endl;
+    std::cout << "All session tests successfully passed" << std::endl;
 
 	return  0;
 }

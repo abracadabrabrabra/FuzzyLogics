@@ -35,8 +35,14 @@ int main() {
         assert(fv.is_valid());
     }
 
-    std::chrono::duration<double> elapsed = end - start; // 0.04 second
+    std::chrono::duration<double> elapsed = end - start; 
     std::cout << "Generated set of " << set.size() << " values, time = " << elapsed.count() << " seconds\n";
+
+    start = std::chrono::steady_clock::now();
+    auto bigset = generate_poisson_set(300, 10.0, 25.0, 1000);
+    end = std::chrono::steady_clock::now();
+    elapsed = end - start; 
+    std::cout << "Generated set of " << bigset.size() << " values, time = " << elapsed.count() << " seconds\n";
 
     auto v1 = generate_poisson_value(5.0, 1000, FuzzyValue::NormalizeMode::Max, 0.1, 42);
     auto v2 = generate_poisson_value(5.0, 1000, FuzzyValue::NormalizeMode::Max, 0.1, 42);

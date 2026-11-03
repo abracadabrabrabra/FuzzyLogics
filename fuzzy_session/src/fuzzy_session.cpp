@@ -3,6 +3,25 @@
 #include <stdexcept>
 #include <sstream>
 #include <fstream>
+#include <cstring>
+
+namespace {
+    template <typename T>
+    bool write_pod(std::uint8_t*& ptr, std::uint8_t* end, const T& value) {
+        if (ptr + sizeof(T) > end)  return false;
+        std::memcpy(ptr, &value, sizeof(T));
+        ptr += sizeof(T);
+        return true;
+    }
+
+    template <typename T>
+    bool read_pod(const std::uint8_t*& ptr, const std::uint8_t* end, T& value) {
+        if (ptr + sizeof(T) > end)  return false;
+        std::memcpy(&value, ptr, sizeof(T));
+        ptr += sizeof(T);
+        return true;
+    }
+} // anonymous namespace
 
 namespace fuzzy_session {
 
@@ -103,6 +122,63 @@ namespace fuzzy_session {
             out << "[" << i << "] size=" << values_[i].size()
                 << " centroid=" << values_[i].centroid() << "\n";
         }
+    }
+
+
+    std::size_t Session::serialized_size() const {
+        std::size_t total = sizeof(std::uint32_t) * (values_.size() + 1); // cnt of fuzzy values + sizes
+        for (const auto& v : values_) {
+            total += v.size() * sizeof(double) * 2;   // xs + mus
+        }
+        return total;
+    }
+
+    std::size_t Session::serialize_to_buffer(std::uint8_t* buffer, std::size_t buffer_size) const {
+        std::uint8_t* ptr = buffer;
+        std::uint8_t* end = buffer + buffer_size;
+
+        std::uint32_t n = static_cast<std::uint32_t>(values_.size());
+        if (!write_pod(ptr, end, n)) throw std::runtime_error("serialize: buffer too small (count)");
+
+        for (const auto& v : values_) {
+            std::uint32_t size = static_cast<std::uint32_t>(v.size());
+            if (!write_pod(ptr, end, size)) throw std::runtime_error("serialize: buffer too small (size)");
+
+            for (double x : v.xs()) {
+                if (!write_pod(ptr, end, x)) throw std::runtime_error("serialize: buffer too small (xs)");
+            }
+            for (double mu : v.mus()) {
+                if (!write_pod(ptr, end, mu)) throw std::runtime_error("serialize: buffer too small (mus)");
+            }
+        }
+        return static_cast<std::size_t>(ptr - buffer);
+    }
+
+    std::size_t Session::deserialize_from_buffer(const std::uint8_t* buffer, std::size_t buffer_size) {
+        const std::uint8_t* ptr = buffer;
+        const std::uint8_t* end = buffer + buffer_size;
+
+        std::uint32_t n = 0;
+        if (!read_pod(ptr, end, n)) throw std::runtime_error("deserialize: buffer too small (count)");
+
+        std::vector<FuzzyValue> new_values;
+        new_values.reserve(n);
+
+        for (std::uint32_t k = 0; k < n; ++k) {
+            std::uint32_t size = 0;
+            if (!read_pod(ptr, end, size)) throw std::runtime_error("deserialize: buffer too small (size)");
+
+            std::vector<double> xs(size), mus(size);
+            for (std::uint32_t i = 0; i < size; ++i) {
+                if (!read_pod(ptr, end, xs[i])) throw std::runtime_error("deserialize: buffer too small (xs)");
+            }
+            for (std::uint32_t i = 0; i < size; ++i) {
+                if (!read_pod(ptr, end, mus[i])) throw std::runtime_error("deserialize: buffer too small (mus)");
+            }
+            new_values.emplace_back(xs, mus);
+        }
+        values_ = std::move(new_values);
+        return static_cast<std::size_t>(ptr - buffer);
     }
 
 } // namespace fuzzy_session
