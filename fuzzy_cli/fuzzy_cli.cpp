@@ -175,11 +175,12 @@ int main() {
     HANDLE shutdown_event = OpenEventA(SYNCHRONIZE, FALSE, "Local\\FuzzySession_Shutdown");
 
     Session session;
+    bool is_running = true;
     std::string line;
     std::cout << "fuzzy_cli: type 'help' for commands, 'exit' to quit\n";
     std::cout << "> ";
 
-    while (true) {
+    while (is_running) {
         if (shutdown_event && WaitForSingleObject(shutdown_event, 0) == WAIT_OBJECT_0) {
             std::cout << "GUI has exited. Closing CLI.\n";
             break;
@@ -203,6 +204,7 @@ int main() {
 
                         if (!keep_running) {
                             shared.unlock();
+                            is_running = false;
                             break;  //exit
                         }
                     }
