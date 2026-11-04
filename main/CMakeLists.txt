@@ -15,6 +15,7 @@ target_link_libraries(MyFuzzyApp PRIVATE
     fuzzy_generator
     fuzzy_io
     fuzzy_session
+    ipc
     imgui_implot
     SDL3::SDL3
     OpenGL::GL

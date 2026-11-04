@@ -16,6 +16,7 @@ namespace fuzzy_session {
 
     class Session {
     public:
+        static constexpr std::size_t kMaxSessionValues = 500;
         Session() = default;
 
         std::size_t add(const FuzzyValue& v);

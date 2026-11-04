@@ -9,7 +9,7 @@ namespace ipc {
 	class SharedSession {
 
 	private:
-		SharedSession() = default;
+		
 		void close() noexcept;
 
 		void* mapping_ = nullptr; // HANDLE
@@ -21,6 +21,7 @@ namespace ipc {
 	public:
 		static SharedSession create(const std::string& name, std::size_t buffer_size);
 		static SharedSession open(const std::string& name);
+		SharedSession() = default;
 		~SharedSession();
 
 		SharedSession(const SharedSession& other) = delete;

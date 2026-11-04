@@ -1,6 +1,7 @@
 #include "fuzzy_session.h"
 #include "poisson_generator.h"
 #include "fuzzy_io.h"
+#include "ipc.h"
 
 #include <iostream>
 #include <vector>
@@ -8,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <windows.h>
 
 using namespace fuzzy_session;
 
@@ -146,14 +148,69 @@ static bool execute_command(const std::string& line, Session& session) {
 }
 
 int main() {
+
+    HANDLE hMutex = CreateMutexA(nullptr, FALSE, "Local\\FuzzyCLI_SingleInstance_Mutex"); //only 1 cli
+    if (hMutex == nullptr) {
+        std::cerr << "Failed to create mutex.\n";
+        return 1;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        std::cerr << "fuzzy_cli is already running. Close the existing window first.\n";
+        CloseHandle(hMutex);
+        return 0;
+    }
+
+    ipc::SharedSession shared;
+    try {
+        shared = ipc::SharedSession::open("FuzzySession");
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Failed to open shared session: " << e.what() << "\n";
+        std::cerr << "Is the GUI running?\n";
+        CloseHandle(hMutex);
+        return 1;
+    }
+
+    HANDLE shutdown_event = OpenEventA(SYNCHRONIZE, FALSE, "Local\\FuzzySession_Shutdown");
+
     Session session;
     std::string line;
     std::cout << "fuzzy_cli: type 'help' for commands, 'exit' to quit\n";
     while (true) {
         std::cout << "> ";
+        if (shutdown_event && WaitForSingleObject(shutdown_event, 0) == WAIT_OBJECT_0) {
+            std::cout << "GUI has exited. Closing CLI.\n";
+            break;
+        }
+
         if (!std::getline(std::cin, line)) break; // EOF
-        if (!execute_command(line, session)) break;
+        if (line.empty()) continue;
+
+        if (shutdown_event && WaitForSingleObject(shutdown_event, 0) == WAIT_OBJECT_0) {
+            std::cout << "GUI has exited. Closing CLI.\n";
+            break;
+        }
+
+        shared.lock();
+        try {
+            session.deserialize_from_buffer(shared.data(), shared.size());
+            bool keep_running = execute_command(line, session);
+            session.serialize_to_buffer(shared.data(), shared.size());
+
+            if (!keep_running) {
+                shared.unlock();
+                break;  //exit
+            }
+        }
+        catch (const std::exception& e) {
+            std::cout << "Error: " << e.what() << "\n";
+        }
+        shared.unlock();
     }
+
     std::cout << "Bye.\n";
+    if (shutdown_event) CloseHandle(shutdown_event);
+    CloseHandle(hMutex);
+
     return 0;
 }

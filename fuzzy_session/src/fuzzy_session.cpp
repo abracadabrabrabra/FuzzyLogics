@@ -26,16 +26,25 @@ namespace {
 namespace fuzzy_session {
 
     std::size_t Session::add(const FuzzyValue& v) {
+        if (values_.size() >= kMaxSessionValues) {
+            throw std::length_error("Session::add: maximum number of values reached (" + std::to_string(kMaxSessionValues) + ")");
+        }
         values_.push_back(v);
         return values_.size() - 1;
     }
     std::size_t Session::add(FuzzyValue&& v) {
+        if (values_.size() >= kMaxSessionValues) {
+            throw std::length_error("Session::add: maximum number of values reached (" + std::to_string(kMaxSessionValues) + ")");
+        }
         values_.push_back(std::move(v));
         return values_.size() - 1;
     }
 
     std::pair<std::size_t, std::size_t> Session::add(const std::vector<FuzzyValue>& vs) {
         if (vs.empty()) return { values_.size(), values_.size() };
+        if ((values_.size() + vs.size()) > kMaxSessionValues) {
+            throw std::length_error("Session::add: maximum number of values reached (" + std::to_string(kMaxSessionValues) + ")");
+        }
         std::size_t first = values_.size();
         for (const auto& v : vs) {
             values_.push_back(v);
@@ -45,6 +54,9 @@ namespace fuzzy_session {
 
     std::pair<std::size_t, std::size_t> Session::add(std::vector<FuzzyValue>&& vs) {
         if (vs.empty()) return { values_.size(), values_.size() };
+        if ((values_.size() + vs.size()) > kMaxSessionValues) {
+            throw std::length_error("Session::add: maximum number of values reached (" + std::to_string(kMaxSessionValues) + ")");
+        }
         std::size_t first = values_.size();
         for (auto& v : vs) {
             values_.push_back(std::move(v));

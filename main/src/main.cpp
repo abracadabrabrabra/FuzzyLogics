@@ -14,10 +14,14 @@
 #include <stdio.h>
 #include <vector>
 #include <SDL3/SDL.h>
+#include <windows.h>
 
 #include "fuzzy_session.h"
 #include "poisson_generator.h"
 #include "fuzzy_io.h"
+#include "ipc.h"
+
+using namespace ipc;
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <SDL3/SDL_opengles2.h>
@@ -134,9 +138,57 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
     //IM_ASSERT(font != nullptr);
 
+    //Shared session
+    const std::size_t SHARED_BUFFER_SIZE = 1024 * 1024;
+    ipc::SharedSession shared;
+    try {
+        shared = ipc::SharedSession::create("FuzzySession", SHARED_BUFFER_SIZE);
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Failed to create shared session: " << e.what() << "\n";
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+        ImPlot::DestroyContext();
+        ImGui::DestroyContext();
+
+        SDL_GL_DestroyContext(gl_context);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+
     //FuzzySession
     fuzzy_session::Session session;
     std::vector<std::string> plot_labels;
+
+    auto read_session_from_shared = [&]() {
+        shared.lock();
+        try {
+            session.deserialize_from_buffer(shared.data(), shared.size());
+            plot_labels.resize(session.size());
+            for (size_t i = 0; i < session.size(); ++i) {
+                if (plot_labels[i].empty()) {  
+                    plot_labels[i] = "Value " + std::to_string(i);
+                }
+            }
+        }
+        catch (const std::exception& e) {
+            std::cerr << "deserialize error: " << e.what() << "\n";
+        }
+        shared.unlock();
+        };
+
+    auto write_session_to_shared = [&]() {
+        shared.lock();
+        try {
+            session.serialize_to_buffer(shared.data(), shared.size());
+        }
+        catch (const std::exception& e) {
+            std::cerr << "serialize error: " << e.what() << "\n";
+        }
+        shared.unlock();
+    };
 
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -157,6 +209,7 @@ int main(int, char**)
     ImPlotColormap custom_map = ImPlot::AddColormap("CustomFuzzy", custom_colors.data(), COLOR_COUNT);
 
     // Main loop
+    HANDLE shutdown_event = CreateEventA(nullptr, TRUE, FALSE, "Local\\FuzzySession_Shutdown"); 
     bool done = false;
 #ifdef __EMSCRIPTEN__
     // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
@@ -189,6 +242,8 @@ int main(int, char**)
             SDL_Delay(10);
             continue;
         }
+
+        read_session_from_shared();
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -259,23 +314,49 @@ int main(int, char**)
 
             ImGui::SetCursorPosX(centerX);
             if (ImGui::Button("Generate", ImVec2(btnW, 0))) {
-                auto set = fuzzy_generator::generate_poisson_set(50, 10.0, 20.0, 1000);
-                size_t old_size = session.size();
-                session.add(std::move(set));
+                try {
+                    auto set = fuzzy_generator::generate_poisson_set(50, 10.0, 20.0, 1000);
+                    size_t old_size = session.size();
+                    session.add(std::move(set));
 
-                for (size_t i = old_size; i < session.size(); ++i) {
-                    plot_labels.push_back("Value " + std::to_string(i));
+                    for (size_t i = old_size; i < session.size(); ++i) {
+                        plot_labels.push_back("Value " + std::to_string(i));
+                    }
+                    write_session_to_shared();
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "Error: " << e.what();
                 }
             }
             ImGui::Dummy(ImVec2(0, gap));
 
             ImGui::SetCursorPosX(centerX);
-            ImGui::Button("Command prompt", ImVec2(btnW, 0));
+            if (ImGui::Button("Command prompt", ImVec2(btnW, 0))) {
+                STARTUPINFOA si = {};
+                si.cb = sizeof(si);
+                PROCESS_INFORMATION pi = {};
+                if (!CreateProcessA(
+                    nullptr,
+                    (LPSTR)"fuzzy_cli.exe",
+                    nullptr, nullptr, FALSE,
+                    CREATE_NEW_CONSOLE,
+                    nullptr, nullptr,
+                    &si, &pi))
+                {
+                    std::cerr << "Failed to launch fuzzy_cli.exe\n";
+                }
+                else {
+                    CloseHandle(pi.hProcess);
+                    CloseHandle(pi.hThread);
+                }
+            }
             ImGui::Dummy(ImVec2(0, gap));
 
             ImGui::SetCursorPosX(centerX);
             if (ImGui::Button("Clear", ImVec2(btnW, 0))) {
                 session.clear();
+                plot_labels.clear();
+                write_session_to_shared();
             }
             ImGui::Dummy(ImVec2(0, gap));
 
@@ -338,6 +419,10 @@ int main(int, char**)
 
     // Cleanup
     // [If using SDL_MAIN_USE_CALLBACKS: all code below would likely be your SDL_AppQuit() function]
+
+    SetEvent(shutdown_event);
+    CloseHandle(shutdown_event);
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImPlot::DestroyContext();
