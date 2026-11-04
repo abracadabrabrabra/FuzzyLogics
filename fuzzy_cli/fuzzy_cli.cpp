@@ -10,6 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <windows.h>
+#include <conio.h>
 
 using namespace fuzzy_session;
 
@@ -176,36 +177,56 @@ int main() {
     Session session;
     std::string line;
     std::cout << "fuzzy_cli: type 'help' for commands, 'exit' to quit\n";
+    std::cout << "> ";
+
     while (true) {
-        std::cout << "> ";
         if (shutdown_event && WaitForSingleObject(shutdown_event, 0) == WAIT_OBJECT_0) {
             std::cout << "GUI has exited. Closing CLI.\n";
             break;
         }
 
-        if (!std::getline(std::cin, line)) break; // EOF
-        if (line.empty()) continue;
+        while (_kbhit()) {
+            int ch = _getch();
+            if (ch == '\r') { //enter
+                std::cout << "\n";
+                if (!line.empty()) {
+                    if (shutdown_event && WaitForSingleObject(shutdown_event, 0) == WAIT_OBJECT_0) {
+                        std::cout << "GUI has exited. Closing CLI.\n";
+                        break;
+                    }
 
-        if (shutdown_event && WaitForSingleObject(shutdown_event, 0) == WAIT_OBJECT_0) {
-            std::cout << "GUI has exited. Closing CLI.\n";
-            break;
-        }
+                    shared.lock();
+                    try {
+                        session.deserialize_from_buffer(shared.data(), shared.size());
+                        bool keep_running = execute_command(line, session);
+                        session.serialize_to_buffer(shared.data(), shared.size());
 
-        shared.lock();
-        try {
-            session.deserialize_from_buffer(shared.data(), shared.size());
-            bool keep_running = execute_command(line, session);
-            session.serialize_to_buffer(shared.data(), shared.size());
-
-            if (!keep_running) {
-                shared.unlock();
-                break;  //exit
+                        if (!keep_running) {
+                            shared.unlock();
+                            break;  //exit
+                        }
+                    }
+                    catch (const std::exception& e) {
+                        std::cout << "Error: " << e.what() << "\n";
+                    }
+                    shared.unlock();
+                    line.clear();
+                }
+                std::cout << "> ";
             }
+            else if (ch == '\b') {  //backspace
+                if (!line.empty()) {
+                    line.pop_back();
+                    std::cout << "\b \b";
+                }
+            }
+            else if (ch >= 32 && ch < 127) {
+                line += static_cast<char>(ch);
+                std::cout << static_cast<char>(ch);
+            }
+            //others ignore
         }
-        catch (const std::exception& e) {
-            std::cout << "Error: " << e.what() << "\n";
-        }
-        shared.unlock();
+        Sleep(10);
     }
 
     std::cout << "Bye.\n";
