@@ -187,7 +187,7 @@ int main() {
         }
 
         while (_kbhit()) {
-            int ch = _getch();
+            wint_t ch = _getwch();
             if (ch == '\r') { //enter
                 std::cout << "\n";
                 if (!line.empty()) {

@@ -6,6 +6,7 @@
 // - Getting Started      https://dearimgui.com/getting-started
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
+#define NOMINMAX
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -13,6 +14,11 @@
 #include "implot.h"
 #include <stdio.h>
 #include <vector>
+#include <algorithm>
+#include <limits>
+#include <iomanip>
+#include <cstddef>
+#include <type_traits>
 #include <SDL3/SDL.h>
 #include <windows.h>
 
@@ -32,6 +38,57 @@ using namespace ipc;
 #ifdef __EMSCRIPTEN__
 #include "../libs/emscripten/emscripten_mainloop_stub.h"
 #endif
+
+struct Filter {
+    bool enabled = false;
+
+    float centroid_min = 0.0f, centroid_max = 100.0f;
+    float length_min = 0.0f, length_max = 100.0f;
+
+    float alpha = 0.5f;
+    float alpha_width_min = 0.0f, alpha_width_max = 100.0f;
+
+    bool use_centroid = false;
+    bool use_length = false;
+    bool use_alpha_width = false;
+};
+
+
+static float alpha_width(const FuzzyValue& v, float alpha) {
+    float xmin = std::numeric_limits<float>::max();
+    float xmax = std::numeric_limits<float>::lowest();
+    bool found = false;
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (v.mus()[i] >= alpha) {
+            xmin = std::min(xmin, static_cast<float>(v.xs()[i]));
+            xmax = std::max(xmax, static_cast<float>(v.xs()[i]));
+            found = true;
+        }
+    }
+    return found ? (xmax - xmin) : 0.0f;
+}
+
+static float interval_length(const FuzzyValue& v) {
+    if (v.size() < 2) return 0.0f;
+    return static_cast<float>(v.xs().back() - v.xs().front());
+}
+
+static bool matches_filter(const FuzzyValue& v, const Filter& f) {
+    if (!f.enabled) return true;
+    if (f.use_centroid) {
+        float c = static_cast<float>(v.centroid());
+        if (c < f.centroid_min || c > f.centroid_max) return false;
+    }
+    if (f.use_length) {
+        float len = interval_length(v);
+        if (len < f.length_min || len > f.length_max) return false;
+    }
+    if (f.use_alpha_width) {
+        float w = alpha_width(v, f.alpha);
+        if (w < f.alpha_width_min || w > f.alpha_width_max) return false;
+    }
+    return true;
+}
 
 // Main code
 int main(int, char**)
@@ -193,6 +250,9 @@ int main(int, char**)
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+    //Filter
+    Filter filter;
+
 
     //Custom ColorMap
 
@@ -272,11 +332,19 @@ int main(int, char**)
 
                 for (size_t i = 0; i < session.size(); ++i) {
                     const auto& v = session.get(i);
+                    bool matches = matches_filter(v, filter);
+
                     ImPlotSpec spec;
-                    spec.LineColor = ImPlot::GetColormapColor(static_cast<int>(i), custom_map);
+                    if (matches) {
+                        spec.LineColor = ImPlot::GetColormapColor(static_cast<int>(i), custom_map);
+                        spec.LineWeight = 2.0f;
+                    }
+                    else {
+                        spec.LineColor = ImVec4(0.3f, 0.3f, 0.3f, 0.3f);  //grey
+                        spec.LineWeight = 1.0f;
+                    }
                     const char* label = (i < plot_labels.size()) ? plot_labels[i].c_str() : "Value";
-                    ImPlot::PlotLine(label,
-                        v.xs().data(), v.mus().data(),
+                    ImPlot::PlotLine(label, v.xs().data(), v.mus().data(),
                         static_cast<int>(v.size()), spec);
                 }
                 ImPlot::EndPlot();
@@ -381,17 +449,77 @@ int main(int, char**)
             ImDrawList* draw_list = ImGui::GetWindowDrawList();
             ImGui::Text("Info text:\n");
             for (size_t i = 0; i < session.size(); ++i) {
+                const auto& v = session.get(i);
+                bool matches = matches_filter(v, filter);
                 ImVec4 color = ImPlot::GetColormapColor(static_cast<int>(i), custom_map);
-                ImU32 col_u32 = ImGui::ColorConvertFloat4ToU32(color);
+                if (!matches) color.w = 0.3f;  //grey
 
+                ImU32 col_u32 = ImGui::ColorConvertFloat4ToU32(color);
                 ImVec2 p = ImGui::GetCursorScreenPos();
                 float square_size = ImGui::GetTextLineHeight() * 0.8f;
-
                 draw_list->AddRectFilled(p, ImVec2(p.x + square_size, p.y + square_size), col_u32);
-
                 ImGui::Dummy(ImVec2(square_size + 4.0f, square_size));
                 ImGui::SameLine();
-                ImGui::Text("[%zu] size=%zu centroid=%.3f", i, session.get(i).size(), session.centroid(i));
+
+                if (matches) {
+                    ImGui::Text("[%zu] size=%zu centroid=%.3f", i, v.size(), v.centroid());
+                }
+                else {
+                    ImGui::TextDisabled("[%zu] size=%zu centroid=%.3f", i, v.size(), v.centroid());
+                }
+            }
+        }
+        ImGui::End();
+
+        //Filter panel
+        ImVec2 filterPos(graphicsTopLeft.x, graphicsTopLeft.y + graphicsSize.y + 10.0f);
+        ImGui::SetNextWindowSize(ImVec2(graphicsSize.x, viewportSize.y * 0.2f), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(filterPos, ImGuiCond_Always);
+
+        if (ImGui::Begin("Filters", nullptr, commonFlags)) {
+            ImGui::Checkbox("Enable filter", &filter.enabled);
+            ImGui::Separator();
+
+            //Centroid
+            ImGui::Checkbox("##use_centroid", &filter.use_centroid);
+            ImGui::SameLine();
+            ImGui::Text("Centroid:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::DragFloat("##cmin", &filter.centroid_min, 0.1f, 0.0f, 100.0f, "min %.2f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::DragFloat("##cmax", &filter.centroid_max, 0.1f, 0.0f, 100.0f, "max %.2f");
+
+            //Length
+            ImGui::Checkbox("##use_length", &filter.use_length);
+            ImGui::SameLine();
+            ImGui::Text("Length:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::DragFloat("##lmin", &filter.length_min, 0.1f, 0.0f, 100.0f, "min %.2f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::DragFloat("##lmax", &filter.length_max, 0.1f, 0.0f, 100.0f, "max %.2f");
+
+            //Alpha width
+            ImGui::Checkbox("##use_alpha", &filter.use_alpha_width);
+            ImGui::SameLine();
+            ImGui::Text("Alpha width:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::DragFloat("##amin", &filter.alpha_width_min, 0.1f, 0.0f, 100.0f, "min %.2f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::DragFloat("##amax", &filter.alpha_width_max, 0.1f, 0.0f, 100.0f, "max %.2f");
+
+            ImGui::Separator();
+            ImGui::SetNextItemWidth(200);
+            ImGui::SliderFloat("Alpha level", &filter.alpha, 0.0f, 1.0f, "%.2f");
+
+            //Reset filters
+            if (ImGui::Button("Reset filter")) {
+                filter = Filter{};
             }
         }
         ImGui::End();
