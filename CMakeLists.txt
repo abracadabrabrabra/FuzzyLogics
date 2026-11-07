@@ -21,6 +21,7 @@ set_target_properties(imgui_implot PROPERTIES
 
 add_subdirectory(fuzzy_core)
 add_subdirectory(fuzzy_generator)
+add_subdirectory(fuzzy_cluster)
 add_subdirectory(fuzzy_io)
 add_subdirectory(fuzzy_session)
 add_subdirectory(ipc)

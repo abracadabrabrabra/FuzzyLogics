@@ -1,9 +1,11 @@
 #include "fuzzy_session.h"
 #include "poisson_generator.h"
 #include "fuzzy_io.h"
+#include "cluster.h"
 #include "ipc.h"
 
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <string>
 #include <fstream>
@@ -42,6 +44,7 @@ static void print_help() {
         "  load <path>                       - load session from file (appends)\n"
         "  log <path>                        - write session summary to log file\n"
         "  clear                             - clear session\n"
+        "  cluster <c> [-v]                  - separate into c clusters (verbose)\n"
         "  remove <i>                        - remove value i\n";
 }
 
@@ -131,6 +134,61 @@ static bool execute_command(const std::string& line, Session& session) {
         else if (cmd == "clear") {
             session.clear();
             std::cout << "Session cleared\n";
+        }
+        else if (cmd == "cluster") {
+            std::size_t c;
+            bool verbose = false;
+            if (!(iss >> c)) { std::cout << "Usage: cluster <c> [-v]\n"; return true; }
+
+            std::string flag;
+            if (iss >> flag && flag == "-v") verbose = true;
+
+            try {
+                std::vector<FuzzyValue> vals;
+                for (std::size_t i = 0; i < session.size(); ++i) {
+                    vals.push_back(session.get(i));
+                }
+
+                auto res = fuzzy_cluster::fuzzy_c_means(vals, c);
+
+                std::cout << "Clustering result (c=" << c << "):\n";
+                std::cout << "Centers: ";
+                for (double center : res.centers) {
+                    std::cout << std::fixed << std::setprecision(2) << center << " ";
+                }
+                std::cout << "\n\n";
+
+                for (std::size_t i = 0; i < vals.size(); ++i) {
+                    std::size_t best_k = 0;
+                    double best_u = res.memberships[i][0];
+                    for (std::size_t k = 1; k < c; ++k) {
+                        if (res.memberships[i][k] > best_u) {
+                            best_u = res.memberships[i][k];
+                            best_k = k;
+                        }
+                    }
+
+                    std::cout << "[" << std::setw(2) << i << "] ";
+
+                    if (verbose) {
+                        std::cout << "(centroid=" << std::setprecision(2) << vals[i].centroid() << "): U = [";
+                        for (std::size_t k = 0; k < c; ++k) {
+                            std::cout << std::setprecision(3) << res.memberships[i][k];
+                            if (k + 1 < c) std::cout << ", ";
+                        }
+                        std::cout << "] ";
+                    }
+                    else {
+                        std::cout << "(u=" << std::setprecision(2) << best_u
+                            << ", centroid=" << std::setprecision(2) << vals[i].centroid() << ") ";
+                    }
+
+                    std::cout << "-> Cluster " << best_k << "\n";
+                }
+            }
+            catch (const std::exception& e) {
+                std::cout << "Error: " << e.what() << "\n";
+            }
         }
         else if (cmd == "remove") {
             std::size_t i;
