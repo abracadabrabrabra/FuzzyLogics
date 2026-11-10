@@ -24,3 +24,5 @@ target_link_libraries(MyFuzzyApp PRIVATE
     SDL3::SDL3
     OpenGL::GL
 )
+
+add_dependencies(MyFuzzyApp fuzzy_cli)
