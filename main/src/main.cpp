@@ -256,7 +256,7 @@ int main(int, char**)
 
     //Custom ColorMap
 
-    const int COLOR_COUNT = 400;
+    const int COLOR_COUNT = 500;
     std::vector<ImVec4> custom_colors;
     custom_colors.reserve(COLOR_COUNT);
 
