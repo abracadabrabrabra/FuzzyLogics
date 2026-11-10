@@ -1,0 +1,14 @@
+{
+  "name": "fuzzy-complex",
+  "version": "0.1.0",
+  "dependencies": [
+    "imgui",
+    {
+      "name": "imgui",
+      "features": [ "sdl3-binding", "opengl3-binding" ]
+    },
+    "implot",
+    "sdl3",
+    "sdl3-ttf"
+  ]
+}

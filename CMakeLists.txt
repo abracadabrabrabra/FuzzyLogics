@@ -6,18 +6,8 @@ if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 project(FuzzyComplex CXX)
 
-# Общая выходная директория, чтобы все .exe и .dll
-# оказывались в одной папке и не приходилось копировать вручную
+# Common output directory
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
-message(STATUS "IMGUI_IMPLOT = $ENV{IMGUI_IMPLOT}")
-
-add_library(imgui_implot STATIC IMPORTED)
-
-set_target_properties(imgui_implot PROPERTIES
-    IMPORTED_LOCATION "$ENV{IMGUI_IMPLOT}/imgui_implot.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "$ENV{IMGUI_IMPLOT}/../../imgui;$ENV{IMGUI_IMPLOT}/../../imgui/backends;$ENV{IMGUI_IMPLOT}/../../implot"
-)
 
 add_subdirectory(fuzzy_core)
 add_subdirectory(fuzzy_generator)
